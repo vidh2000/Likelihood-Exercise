@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from functions import *
 from scipy import optimize
 from multiprocessing import Pool, freeze_support
-from itertools import repeat
+from functools import partial
 
 
 # Functions
@@ -14,6 +14,9 @@ def gauss(x,mu,sig):
 def nll(params, data):
     """
     Negative Log Likehood.
+    Parameters:
+    - params: [mu,sigma]. Can be floats or arrays
+    - data: dataset of x values
     We're dealing with Gaussian signal here hence
     params are as defined below (hardcoded).
     """
@@ -27,14 +30,29 @@ def nll(params, data):
 
     return nll
 
+# def nllMP(sig_arr,data,mu):
+#     """
+#     Form of NLL function suitable for the use in parallelised framework 
+#     (due to parsing of arguments..)
+#     """
+#     print(r"mu=",round(mu,3))
+#     row = []
+#     for sig in sig_arr:
+#         param_vec = [mu,sig]
+#         NLL = nll(param_vec,data)
+#         row.append(NLL)
+#     return row
+
 def task(mu,sig_arr,data):
     """
     Task for parallelised NLL mesh generation
     """
-    print(r"mu=",round(mu,3))
+    #print(r"mu=",round(mu,3))
     row = []
     for sig in sig_arr:
         param_vec = [mu,sig]
+        #if round(mu,3) == 11.388:
+        #    print(sig)
         NLL = nll(param_vec,data)
         # NLL = len(data)*np.log(sig)
         # for x in data:
@@ -48,8 +66,10 @@ def nll_mesh(mu_arr, sig_arr, data):
     Useful for plotting contours etc.
     Parallelised on the outer loop for speed.
     """
-
-    args = list(zip(mu_arr,repeat(sig_arr),repeat(data)))
+    #partial_nll_func = partial(nllMP,sig_arr,data)
+    args = list(zip(mu_arr,
+                    [sig_arr for _ in mu_arr],
+                    [data for _ in mu_arr]))
     with Pool() as pool:
         mesh = list(pool.starmap(task, args))
     return mesh
@@ -76,10 +96,13 @@ if __name__=="__main__":
 
     
     mu_arr = np.linspace(2,12,N_meshpoints)
-    sig_arr = np.linspace(0.5,1.5,N_meshpoints)
+    sig_arr = np.linspace(0.9,1.1,N_meshpoints)
 
     # NLL plotting 2D
     NLL = nll_mesh(mu_arr,sig_arr,data)
+    vec_arr = [[4,0.93], [10,1.8], [5,1.5], [3,1],[6,1],[9,1],]
+    for vec in vec_arr:
+        print(vec,nll(vec, data))
     title="NLL_2D_mesh"
     plt.figure(title)
     h = plt.contourf(mu_arr, sig_arr, NLL, alpha=1.0,cmap="nipy_spectral",levels=200)
