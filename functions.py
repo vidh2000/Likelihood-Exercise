@@ -62,7 +62,16 @@ def nll_mesh(mu_arr, sig_arr, data):
 					list(range(N))))
     with Pool() as pool:
         mesh = list(pool.starmap(task, args))
-
+		
+    # Non parallelised version for debugging
+    # mesh = []
+    # for mu in tqdm(mu_arr):
+    #     row = []
+    #     for sig in sig_arr:
+    #         param_vec = [mu,sig]
+    #         NLL = nll(param_vec,data)
+    #         row.append(NLL)
+    #     mesh.append(row)
     return mesh
 
 

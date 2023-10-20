@@ -22,7 +22,7 @@ N_SIGNAL = 15000
 if __name__=="__main__":
 
     
-    N_meshpoints = 50
+    
 
     # Create Signal and Background data 
     print("\n################################################\
@@ -39,8 +39,9 @@ if __name__=="__main__":
     plt.ylabel("N")
 
 
-    mu_arr = np.linspace(4,12,N_meshpoints)
-    sig_arr = np.linspace(0.7,5,N_meshpoints)
+    N_meshpoints = 50
+    mu_arr = np.linspace(0,12,N_meshpoints)
+    sig_arr = np.linspace(0.2,5,N_meshpoints)
 
 
     print("\n################################################\
@@ -55,12 +56,13 @@ if __name__=="__main__":
 
     title="NLL_2D_mesh"
     plt.figure(title)
-    h = plt.contourf(mu_arr, sig_arr, NLL, alpha=1.0,cmap="nipy_spectral",levels=200)
+    h = plt.contourf(mu_arr, sig_arr,NLL, alpha=1.0,cmap="nipy_spectral",levels=200)
     plt.xlabel(r"$\mu $")
     plt.ylabel(r"$\sigma $")
     clb = plt.colorbar()
     clb.set_label(r'NLL $(\mu, \sigma)$')
     plt.tight_layout()
+
 
     # Minimising the NLL to obtain optimal parameters
     init_guess = [5,2]
@@ -96,12 +98,13 @@ if __name__=="__main__":
 
     print("\n################################################\
         \n 4a. Using Wilk's theorem to estimate uncertainties \n")
-    uncs_mu, uncs_sigma = pm_error_finder(nll,data,[MU,SIGMA],[2,0.5])
+    uncs_mu, uncs_sigma = pm_error_finder(nll,data,[MU,SIGMA],[1,0.2])
     print(f"mu = {MU} +- {uncs_mu}")
     print(f"sigma = {SIGMA} +- {uncs_sigma}")
 
     std_mu = mean([abs(x) for x in uncs_mu])
     std_sigma = mean([abs(x) for x in uncs_sigma])
+    print(std_mu,std_sigma)
 
     print("\n################################################\
         \n 4a. Verify Wilk's theorem with many datasets \n")
