@@ -6,6 +6,8 @@ from scipy import optimize
 from multiprocessing import Pool, freeze_support
 from functools import partial
 from copy import deepcopy
+from tqdm import tqdm
+
 
 def gauss(x,mu,sig):
     return 1/(np.sqrt(2*np.pi)*sig) * np.exp(-(x-mu)**2 / (2*sig**2))
@@ -30,16 +32,14 @@ def nll(params, data):
     return nll
 
 
-def task(mu,sig_arr,data):
+def task(mu,sig_arr,data,N_mus,i):
     """
     Task for parallelised NLL mesh generation
     """
-    #print(r"mu=",round(mu,3))
     row = []
+    print(f"Mesh generation Progress: {round(float(i)/N_mus*100,3)}%")
     for sig in sig_arr:
         param_vec = [mu,sig]
-        #if round(mu,3) == 11.388:
-        #    print(sig)
         NLL = nll(param_vec,data)
         # NLL = len(data)*np.log(sig)
         # for x in data:
@@ -53,16 +53,20 @@ def nll_mesh(mu_arr, sig_arr, data):
     Useful for plotting contours etc.
     Parallelised on the outer loop for speed.
     """
-    #partial_nll_func = partial(nllMP,sig_arr,data)
+    
+    N = len(mu_arr)
     args = list(zip(mu_arr,
                     [sig_arr for _ in mu_arr],
-                    [data for _ in mu_arr]))
+                    [data for _ in mu_arr],
+					[N for _ in mu_arr],
+					list(range(N))))
     with Pool() as pool:
         mesh = list(pool.starmap(task, args))
+
     return mesh
 
 
-def pm_error_finder(f,params,vec,sig,pos,eps):
+def pm_error_finder(f,params,vec,sig,pos=None,eps=1e-4):
 	"""
 	Bisection method to find +- errors.
 	Finds points where NLL changes by 0.5
@@ -74,15 +78,17 @@ def pm_error_finder(f,params,vec,sig,pos,eps):
 		- vec: vector of the minimum position of the nll i.e "optimal params"
 		- sig: vector of standard deviation guesses where ith index 
                 corresponds to ith parameter in vec
-	    - pos: array of indices you want results for
+	    - pos: array of indices you want results for. Default: all
 	
 	Returns an array of uncertainties for each parameter dimension.
 	uncs = [[+err_1,-err_1],...,[+err_n,-err_n]]
 	"""
 	vec = np.array(vec)
 	n = len(vec)
+	if pos is None:
+		pos = list(range(len(vec)))
 	param_uncs = []
-	func = lambda vec_i: f(params,vec_i)-f(params,vec)-0.5
+	func = lambda vec_i: f(vec_i,params)-f(vec,params)-0.5
 	
 	# find errors for each component - dimension
 	for i in range(n):
@@ -154,3 +160,16 @@ def pm_error_finder(f,params,vec,sig,pos,eps):
 	#print("resal",res_all)
 	results = [res_all[i] for i in pos]
 	return results
+
+
+def data_generation_task(i, n_background,mu,sig,n_signal,n_datasets):
+    
+    print(f"DataGen: {round(float(i)/n_datasets*100,3)} %")
+    bg = 10*np.random.rand(n_background)
+    signal = np.random.normal(mu,sig,n_signal)
+    data = np.concatenate((bg,signal))
+
+    # Minimising the NLL to obtain optimal parameters
+    init_guess = [5,2]
+    results = optimize.minimize(nll,init_guess,(data),method = 'Nelder-Mead')
+    return results.x
