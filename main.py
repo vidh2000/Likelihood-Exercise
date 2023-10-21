@@ -40,8 +40,8 @@ if __name__=="__main__":
 
 
     N_meshpoints = 50
-    mu_arr = np.linspace(0,12,N_meshpoints)
-    sig_arr = np.linspace(0.2,5,N_meshpoints)
+    mu_arr = np.linspace(3,9,N_meshpoints)
+    sig_arr = np.linspace(0.5,1.5,N_meshpoints)
 
 
     print("\n################################################\
@@ -62,7 +62,7 @@ if __name__=="__main__":
     clb = plt.colorbar()
     clb.set_label(r'NLL $(\mu, \sigma)$')
     plt.tight_layout()
-
+    plt.show()
 
     # Minimising the NLL to obtain optimal parameters
     init_guess = [5,2]

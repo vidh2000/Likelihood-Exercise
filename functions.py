@@ -32,18 +32,15 @@ def nll(params, data):
     return nll
 
 
-def task(mu,sig_arr,data,N_mus,i):
+def task(sig,mu_arr,data,N_data,i):
     """
     Task for parallelised NLL mesh generation
     """
     row = []
-    print(f"Mesh generation Progress: {round(float(i)/N_mus*100,3)}%")
-    for sig in sig_arr:
+    print(f"Mesh generation Progress: {round(float(i)/N_data*100,3)}%")
+    for mu in mu_arr:
         param_vec = [mu,sig]
         NLL = nll(param_vec,data)
-        # NLL = len(data)*np.log(sig)
-        # for x in data:
-        #     NLL += (x-mu)**2 / (2*sig)
         row.append(NLL)
     return row
 
@@ -54,24 +51,25 @@ def nll_mesh(mu_arr, sig_arr, data):
     Parallelised on the outer loop for speed.
     """
     
-    N = len(mu_arr)
-    args = list(zip(mu_arr,
-                    [sig_arr for _ in mu_arr],
-                    [data for _ in mu_arr],
-					[N for _ in mu_arr],
-					list(range(N))))
+    N = len(sig_arr)
+    args = list(zip(sig_arr,
+                    [mu_arr for _ in sig_arr],
+                    [data for _ in sig_arr],
+                    [N for _ in sig_arr],
+                    list(range(N))))
     with Pool() as pool:
         mesh = list(pool.starmap(task, args))
 		
-    # Non parallelised version for debugging
+    #Non parallelised version for debugging
     # mesh = []
-    # for mu in tqdm(mu_arr):
+    # for sig in tqdm(sig_arr):
     #     row = []
-    #     for sig in sig_arr:
+    #     for mu in mu_arr:
     #         param_vec = [mu,sig]
     #         NLL = nll(param_vec,data)
     #         row.append(NLL)
     #     mesh.append(row)
+    
     return mesh
 
 
