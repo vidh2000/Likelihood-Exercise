@@ -15,8 +15,8 @@ from progressbar import ProgressBar, SimpleProgress
 # VARIABLES
 SIGMA = 1
 MU = 6
-N_BACKGROUND = 1
-N_SIGNAL = 15000
+N_BACKGROUND = 0
+N_SIGNAL = 1500
 
 
 if __name__=="__main__":
@@ -34,14 +34,15 @@ if __name__=="__main__":
     # Data plotting
 
     plt.figure("Data")
-    plt.hist(data,bins=30)
+    plt.hist(data,bins=30,label="Signal + Background")
+    plt.legend()
     plt.xlabel("x")
     plt.ylabel("N")
 
 
-    N_meshpoints = 50
-    mu_arr = np.linspace(3,9,N_meshpoints)
-    sig_arr = np.linspace(0.5,1.5,N_meshpoints)
+    N_meshpoints = 100
+    mu_arr = np.linspace(1,9,N_meshpoints)
+    sig_arr = np.linspace(0.5,6, N_meshpoints)
 
 
     print("\n################################################\
@@ -62,7 +63,6 @@ if __name__=="__main__":
     clb = plt.colorbar()
     clb.set_label(r'NLL $(\mu, \sigma)$')
     plt.tight_layout()
-    plt.show()
 
     # Minimising the NLL to obtain optimal parameters
     init_guess = [5,2]
@@ -76,6 +76,9 @@ if __name__=="__main__":
 
     # NLL plotting 1D per parameter variations
     title = "NLL(mu) and NLL(sigma)"
+
+    mu_arr = np.linspace(1,9,10000)
+    sig_arr = np.linspace(0.5,6, 10000)
     fig, (ax1, ax2) = plt.subplots(1, 2)
     ax1.plot(mu_arr,nll([mu_arr,SIGMA], data),label=rf"$\sigma$ = {SIGMA}")
     ax1.grid(alpha=0.1)
@@ -98,9 +101,9 @@ if __name__=="__main__":
 
     print("\n################################################\
         \n 4a. Using Wilk's theorem to estimate uncertainties \n")
-    uncs_mu, uncs_sigma = pm_error_finder(nll,data,[MU,SIGMA],[1,0.2])
-    print(f"mu = {MU} +- {uncs_mu}")
-    print(f"sigma = {SIGMA} +- {uncs_sigma}")
+    uncs_mu, uncs_sigma = pm_error_finder(nll,data,best_params,[1,0.2])
+    print(f"mu = {best_params[0]} +- {uncs_mu}")
+    print(f"sigma = {best_params[1]} +- {uncs_sigma}")
 
     std_mu = mean([abs(x) for x in uncs_mu])
     std_sigma = mean([abs(x) for x in uncs_sigma])
@@ -109,9 +112,9 @@ if __name__=="__main__":
     print("\n################################################\
         \n 4a. Verify Wilk's theorem with many datasets \n")
     
-    N_datasets = 100
+    N_datasets = 1000
     
-    # Fluctuating datasets
+    # Generate fluctuating datasets
     partial_data_gen_task = partial(data_generation_task,
             n_background=N_BACKGROUND,mu = MU,sig = SIGMA,n_signal = N_SIGNAL,
             n_datasets = N_datasets)
@@ -128,7 +131,8 @@ if __name__=="__main__":
     ymax = 1
     N_bins=20
     fig, (ax1, ax2) = plt.subplots(1, 2)
-    ax1.hist(mus_arr, bins= N_bins, density = True, stacked=True,
+    ax1.hist(mus_arr, #bins= N_bins, 
+             density = True, stacked=True,
                     label=rf"Distribution over {N_datasets} datasets")
     ax1.vlines(MU,ymin=0,ymax=ymax,linestyles="solid",colors="red", 
               label="True value")
@@ -140,11 +144,12 @@ if __name__=="__main__":
     ax1.vlines(MU-2*std_mu,ymin=0,ymax=ymax,linestyles="dashed",colors="blue")
     ax1.grid(alpha=0.1)
     ax1.legend()
-    ax1.set_ylim(top=1)
+    #ax1.set_ylim(top=1)
     ax1.set_xlabel(r"$\mu$")
     ax1.set_ylabel("Density")
 
-    ax2.hist(sigs_arr,bins=N_bins, density = True, stacked=True,
+    ax2.hist(sigs_arr,#bins=N_bins, 
+             density = True, stacked=True,
                     label=rf"Distribution over {N_datasets} datasets")
     ax2.vlines(SIGMA,ymin=0,ymax=ymax,linestyles="solid",colors="red", 
               label="True value")
@@ -157,7 +162,7 @@ if __name__=="__main__":
 
     ax2.grid(alpha=0.1)
     ax2.legend()
-    ax2.set_ylim(top=1)
+    #ax2.set_ylim(top=1)
     ax2.set_xlabel(r"$\sigma$")
     plt.tight_layout()
     #plt.savefig("plots/4/"+title+".pdf",
@@ -173,5 +178,5 @@ if __name__=="__main__":
     
     
     
-    
+    print("FINISHED")
     plt.show() 
