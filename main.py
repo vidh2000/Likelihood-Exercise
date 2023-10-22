@@ -19,10 +19,7 @@ N_BACKGROUND = 0
 N_SIGNAL = 1500
 
 
-if __name__=="__main__":
-
-    
-    
+if __name__=="__main__":   
 
     # Create Signal and Background data 
     print("\n################################################\
@@ -99,9 +96,13 @@ if __name__=="__main__":
     print("\n################################################\
         \n 3. Creating multiple fluctuated datasets for comparison\n")
 
+    pass # yet to be implemented
+
     print("\n################################################\
         \n 4a. Using Wilk's theorem to estimate uncertainties \n")
-    uncs_mu, uncs_sigma = pm_error_finder(nll,data,best_params,[1,0.2])
+    
+    std_guesses = [1,0.2]
+    uncs_mu, uncs_sigma = pm_error_finder(nll,data,best_params,std_guesses)
     print(f"mu = {best_params[0]} +- {uncs_mu}")
     print(f"sigma = {best_params[1]} +- {uncs_sigma}")
 
@@ -110,7 +111,7 @@ if __name__=="__main__":
     print(f"std_mu = {round(std_mu,4)}, std_sigma = {round(std_sigma,4)}")
 
     print("\n################################################\
-        \n 4a. Verify Wilk's theorem with many datasets \n")
+        \n 4. Verify Wilk's theorem with many datasets \n")
     
     N_datasets = 1000
     
@@ -120,10 +121,15 @@ if __name__=="__main__":
             n_datasets = N_datasets)
     with Pool() as pool:
         # Parallelised dataset production - [(mu1,sig1),..] returned
-        params_arr = pool.map(partial_data_gen_task, range(N_datasets))
+        #params_arr = pool.map(partial_data_gen_task, range(N_datasets))
+        output = pool.map(partial_data_gen_task, range(N_datasets))
     
+    params_arr = [out[0] for out in output]
     mus_arr = [params[0] for params in params_arr]
     sigs_arr = [params[1] for params in params_arr]
+    
+    data_arr = [out[1] for out in output]
+    fulldata = [item for sublist in data_arr for item in sublist]
     
 
     # Checking what fraction of data lies in 1sigma/2sigma intervals
@@ -133,7 +139,7 @@ if __name__=="__main__":
     SigmaOneStdFrac = fracOfDataInRange(sigs_arr,SIGMA,std_sigma)
     SigmaTwoStdFrac = fracOfDataInRange(sigs_arr,SIGMA,2*std_sigma)
 
-    print("\nFraction of data contained within [1 std, 2 std] = [68.27%, 95.45%]")
+    print("\nFraction of data contained within [1 std, 2 std] for 1D = [68.27%, 95.45%]")
     print(f"MU fraction of data in [1std, 2std] = [{muOneStdFrac}, {muTwoStdFrac}]")
     print(f"SIGMA fraction of data in [1std, 2std] = [{SigmaOneStdFrac}, {SigmaTwoStdFrac}] \n")
 
@@ -183,32 +189,54 @@ if __name__=="__main__":
         #dpi=1200, 
         #bbox_inches="tight")
     
+    print("\n################################################\
+        \n 5. 2D phase space Wilk's theorem check \n")
     
     # 2D parameter scatter plots (see if Wilk's theorem works)
-    title = "2D parameter scatter plots"
-    plt.figure(title)
+    df = 2  # For a two-parameter problem
 
-    nll = nll_mesh(
-        np.linspace(min(mus_arr) -std_mu,   max(mus_arr) +std_mu,   N_meshpoints),
-        np.linspace(min(sigs_arr)-std_sigma,max(sigs_arr)+std_sigma,N_meshpoints),
-        data)
-    nll_min = nll([MU,SIGMA],data)
-    h = plt.contour(mus_arr, sigs_arr,nll,levels=[nll_min+1])
-    clb = plt.colorbar()
+    # Calculate χ² values for 1 and 2 sigma confidence intervals
+    chi2_1sigma = chi2.ppf(0.6827, df)
+    chi2_2sigma = chi2.ppf(0.9545, df)
+
+
+    print(f"1 Sigma (68%) Confidence Interval χ² Value for DoF={df}: {chi2_1sigma:.2f}")
+    print(f"2 Sigma (95%) Confidence Interval χ² Value for DoF={df}: {chi2_2sigma:.2f}")
+    
+
+
+    title = "2D phasespace (Wilk's Theorem Contours)"
+    plt.figure(title)
+    
+    xAxis_arr = np.linspace(min(mus_arr)-std_mu,max(mus_arr) +std_mu,100)#len(mus_arr))
+    yAxis_arr = np.linspace(min(sigs_arr)-std_sigma,max(sigs_arr)+std_sigma,100)#len(sigs_arr))
+
+    # For NLL plot and contour drawing take dataset which has param values
+    # closest to the true MU and SIGMA values
+    dataBest = data_arr[find_optimal_data_distrib(mus_arr,sigs_arr,MU,SIGMA)]
+    nllOverNdatasets = nll_mesh(xAxis_arr,yAxis_arr,dataBest)
+
+    nll_min = nll([MU,SIGMA],dataBest)
+
+    h = plt.contour(xAxis_arr, yAxis_arr,nllOverNdatasets,
+                    levels=[nll_min+chi2_1sigma, nll_min+chi2_2sigma],
+                    colors=["b","g"],linewidths = 2)
+                    #alpha=1.0,cmap="nipy_spectral",levels=200)
+    #clb = plt.colorbar()
     clb.set_label(r'NLL $(\mu, \sigma)$')
     plt.tight_layout()
 
 
-    plt.scatter(mus_arr,sigs_arr,color="black", marker=".", label="Data")
-    plt.scatter(MU,SIGMA, color="red", marker="o", label="True value")
+    plt.scatter(mus_arr,sigs_arr,color="black", marker=".", 
+                                        label=r'NLL $(\mu, \sigma)$')
+    plt.scatter(MU,SIGMA, color="red", marker="o", label=r"True $(\mu,\sigma)$")
+    
     plt.xlabel(r"$\mu$")
     plt.ylabel(r"$\sigma$")
     plt.legend()
     plt.tight_layout()
     
     
-    
-    
-    
+   
     print("FINISHED")
     plt.show() 

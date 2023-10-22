@@ -7,6 +7,7 @@ from multiprocessing import Pool, freeze_support
 from functools import partial
 from copy import deepcopy
 from tqdm import tqdm
+from scipy.stats import chi2
 
 
 def gauss(x,mu,sig):
@@ -18,7 +19,7 @@ def gauss(x,mu,sig):
 
 def nll(params, data):
     """
-    Negative Log Likehood (up to a constant)
+    2 * Negative Log Likehood (up to a constant)
     Parameters:
     - params: [mu,sigma]. Can be floats or arrays.
     - data: dataset of x values
@@ -30,9 +31,7 @@ def nll(params, data):
     nll = len(data)*np.log(sig)
     for x in data:
         nll += (x-mu)**2 / (2*sig*sig)
-    #else:
-
-    return nll
+    return 2*nll
 
 
 def task(sig,mu_arr,data,N_data,i):
@@ -79,7 +78,7 @@ def nll_mesh(mu_arr, sig_arr, data):
 def pm_error_finder(f,params,vec,sig,pos=None,eps=1e-12):
     """
     Bisection method to find +- errors.
-    Finds points where NLL changes by 0.5
+    Finds points where 2*NLL changes by amount appropriate to 1std deviation
     from the value at minimum.
 
     Parameters:
@@ -93,12 +92,16 @@ def pm_error_finder(f,params,vec,sig,pos=None,eps=1e-12):
     Returns an array of uncertainties for each parameter dimension.
     uncs = [[+err_1,-err_1],...,[+err_n,-err_n]]
     """
+
+  
+    ChiDiffEqNSigma = 1 #for looking at only 1D phase space errors
+
     vec = np.array(vec)
     n = len(vec)
     if pos is None:
         pos = list(range(len(vec)))
     param_uncs = []
-    func = lambda vec_i: f(vec_i,params)-f(vec,params)-0.5
+    func = lambda vec_i: f(vec_i,params)-f(vec,params) - ChiDiffEqNSigma
 
     # find errors for each component - dimension
     for i in range(n):
@@ -185,23 +188,109 @@ def data_generation_task(i, n_background,mu,sig,n_signal,n_datasets):
     # Minimising the NLL to obtain optimal parameters
     init_guess = [5,2]
     results = optimize.minimize(nll,init_guess,(data),method = 'Nelder-Mead')
-    return results.x
+    return results.x, data
 
 
 def fracOfDataInRange(data, center, maxDist):
     """
     Finds fraction of data that lies within some 
     specified distance from a specific value.
+    
+    Works for 2D and 1D phase space, depending on input vectors of 
+    data and center.
     """
     N = float(len(data))
     count = 0.0
-    for x in data:
-        dist = abs(x-center)
-        if dist < maxDist:
-            count+=1.0
+    if type(center) == float:
+        for x in data:
+            dist = abs(x-center)
+            if dist < maxDist:
+                count+=1.0
+    else:
+        data = np.array(data)
+        center = np.array(center)
+        for x in data:
+            dist = np.linalg.norm(x-center)
+            if dist < maxDist:
+                    count+=1.0
     frac = count/N
     return frac
 
 
+def find_optimal_data_distrib(muArr,sigmaArr,trueMu,trueSigma):
+    """
+    Takes arrays of mu and sigma values, each i corresponding to the same
+    data distribution, and compares them with true values.
+    The distribution - index which has closest mu and sigma to true values
+    is returned as the output of the function.
+    """
+    iBest = 0
+    minDist = 1e8
+    trueVec = np.array([trueMu,trueSigma])
+    for i,(mu,sigma) in enumerate(zip(muArr,sigmaArr)):
+        paramVec = np.array([mu,sigma])
+        dist = np.linalg.norm(paramVec-trueVec)
+        if dist<minDist:
+            print(f"i={i}, newMinDist={dist}")
+            iBest = i
+            minDist = dist
+    print("Dataset with distribution closest to true values:")
+    print(f"Index={iBest} with mu={muArr[iBest]}, sigma={sigmaArr[iBest]}")
+    return iBest
 
+def confidence_ellipse(x, y, ax, n_std=2.0, facecolor='none', **kwargs):
+    """
+    FROM ONLINE
+    Create a plot of the covariance confidence ellipse of `x` and `y`
 
+    Parameters
+    ----------
+    x, y : array_like, shape (n, )
+        Input data.
+
+    ax : matplotlib.axes.Axes
+        The axes object to draw the ellipse into.
+
+    n_std : float
+        The number of standard deviations to determine the ellipse's radiuses.
+
+    Returns
+    -------
+    matplotlib.patches.Ellipse
+
+    Other parameters
+    ----------------
+    kwargs : `~matplotlib.patches.Patch` properties
+    """
+    if x.size != y.size:
+        raise ValueError("x and y must be the same size")
+
+    cov = np.cov(x, y)
+    pearson = cov[0, 1]/np.sqrt(cov[0, 0] * cov[1, 1])
+    # Using a special case to obtain the eigenvalues of this
+    # two-dimensionl dataset.
+    ell_radius_x = np.sqrt(1 + pearson)
+    ell_radius_y = np.sqrt(1 - pearson)
+    ellipse = Ellipse((0, 0),
+        width=ell_radius_x * 2,
+        height=ell_radius_y * 2,
+        facecolor=facecolor,
+        **kwargs)
+
+    # Calculating the stdandard deviation of x from
+    # the squareroot of the variance and multiplying
+    # with the given number of standard deviations.
+    scale_x = np.sqrt(cov[0, 0]) * n_std
+    mean_x = np.mean(x)
+
+    # calculating the stdandard deviation of y ...
+    scale_y = np.sqrt(cov[1, 1]) * n_std
+    mean_y = np.mean(y)
+
+    transf = transforms.Affine2D() \
+        .rotate_deg(45) \
+        .scale(scale_x, scale_y) \
+        .translate(mean_x, mean_y)
+
+    ellipse.set_transform(transf + ax.transData)
+    return ax.add_patch(ellipse)
