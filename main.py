@@ -107,7 +107,7 @@ if __name__=="__main__":
 
     std_mu = mean([abs(x) for x in uncs_mu])
     std_sigma = mean([abs(x) for x in uncs_sigma])
-    print(std_mu,std_sigma)
+    print(f"std_mu = {round(std_mu,4)}, std_sigma = {round(std_sigma,4)}")
 
     print("\n################################################\
         \n 4a. Verify Wilk's theorem with many datasets \n")
@@ -125,14 +125,27 @@ if __name__=="__main__":
     mus_arr = [params[0] for params in params_arr]
     sigs_arr = [params[1] for params in params_arr]
     
-     # NLL plotting 1D per parameter variations
-    title = "Fluctuated 1000 datasets parameters distributions"
 
+    # Checking what fraction of data lies in 1sigma/2sigma intervals
+    muOneStdFrac = fracOfDataInRange(mus_arr,MU,std_mu)
+    muTwoStdFrac = fracOfDataInRange(mus_arr,MU,2*std_mu)
+
+    SigmaOneStdFrac = fracOfDataInRange(sigs_arr,SIGMA,std_sigma)
+    SigmaTwoStdFrac = fracOfDataInRange(sigs_arr,SIGMA,2*std_sigma)
+
+    print("\nFraction of data contained within [1 std, 2 std] = [68.27%, 95.45%]")
+    print(f"MU fraction of data in [1std, 2std] = [{muOneStdFrac}, {muTwoStdFrac}]")
+    print(f"SIGMA fraction of data in [1std, 2std] = [{SigmaOneStdFrac}, {SigmaTwoStdFrac}] \n")
+
+
+    # 1D per parameter variations plots (see if Wilk's theorem works)
+    title = "Fluctuated 1000 datasets parameters distributions"
     ymax = 1
     N_bins=20
     fig, (ax1, ax2) = plt.subplots(1, 2)
     ax1.hist(mus_arr, #bins= N_bins, 
-             density = True, stacked=True,
+             #density = True, 
+             weights=np.ones(len(mus_arr)) / float(len(mus_arr)),
                     label=rf"Distribution over {N_datasets} datasets")
     ax1.vlines(MU,ymin=0,ymax=ymax,linestyles="solid",colors="red", 
               label="True value")
@@ -149,7 +162,8 @@ if __name__=="__main__":
     ax1.set_ylabel("Density")
 
     ax2.hist(sigs_arr,#bins=N_bins, 
-             density = True, stacked=True,
+             #density = True,
+             weights = np.ones(len(sigs_arr)) / float(len(sigs_arr)),
                     label=rf"Distribution over {N_datasets} datasets")
     ax2.vlines(SIGMA,ymin=0,ymax=ymax,linestyles="solid",colors="red", 
               label="True value")
@@ -170,9 +184,27 @@ if __name__=="__main__":
         #bbox_inches="tight")
     
     
-    
-    
-    
+    # 2D parameter scatter plots (see if Wilk's theorem works)
+    title = "2D parameter scatter plots"
+    plt.figure(title)
+
+    nll = nll_mesh(
+        np.linspace(min(mus_arr) -std_mu,   max(mus_arr) +std_mu,   N_meshpoints),
+        np.linspace(min(sigs_arr)-std_sigma,max(sigs_arr)+std_sigma,N_meshpoints),
+        data)
+    nll_min = nll([MU,SIGMA],data)
+    h = plt.contour(mus_arr, sigs_arr,nll,levels=[nll_min+1])
+    clb = plt.colorbar()
+    clb.set_label(r'NLL $(\mu, \sigma)$')
+    plt.tight_layout()
+
+
+    plt.scatter(mus_arr,sigs_arr,color="black", marker=".", label="Data")
+    plt.scatter(MU,SIGMA, color="red", marker="o", label="True value")
+    plt.xlabel(r"$\mu$")
+    plt.ylabel(r"$\sigma$")
+    plt.legend()
+    plt.tight_layout()
     
     
     

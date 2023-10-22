@@ -102,7 +102,7 @@ def pm_error_finder(f,params,vec,sig,pos=None,eps=1e-12):
 
     # find errors for each component - dimension
     for i in range(n):
-        print(f"\nFinding errors for Param No. {i+1}")
+        #print(f"\nFinding errors for Param No. {i+1}")
         uncs = []
         
         #+ point
@@ -119,7 +119,7 @@ def pm_error_finder(f,params,vec,sig,pos=None,eps=1e-12):
             vec_i = deepcopy(vec)
             vec_i[i] = x
             y = func(vec_i)
-            print(f"+err, x={x}, f={y}")
+            #print(f"+err, x={x}, f={y}")
             #print("y",y)
             if y>0:
                 xr = deepcopy(x)
@@ -146,7 +146,7 @@ def pm_error_finder(f,params,vec,sig,pos=None,eps=1e-12):
             vec_i = deepcopy(vec)
             vec_i[i] = x 
             y = func(vec_i)
-            print(f"-err, x={x}, f={y}")
+            #print(f"-err, x={x}, f={y}")
             if y>0:
                 xl = deepcopy(x)
             else:
@@ -186,3 +186,22 @@ def data_generation_task(i, n_background,mu,sig,n_signal,n_datasets):
     init_guess = [5,2]
     results = optimize.minimize(nll,init_guess,(data),method = 'Nelder-Mead')
     return results.x
+
+
+def fracOfDataInRange(data, center, maxDist):
+    """
+    Finds fraction of data that lies within some 
+    specified distance from a specific value.
+    """
+    N = float(len(data))
+    count = 0.0
+    for x in data:
+        dist = abs(x-center)
+        if dist < maxDist:
+            count+=1.0
+    frac = count/N
+    return frac
+
+
+
+
