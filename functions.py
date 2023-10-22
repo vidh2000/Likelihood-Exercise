@@ -231,9 +231,10 @@ def find_optimal_data_distrib(muArr,sigmaArr,trueMu,trueSigma):
         paramVec = np.array([mu,sigma])
         dist = np.linalg.norm(paramVec-trueVec)
         if dist<minDist:
-            print(f"i={i}, newMinDist={dist}")
+            #print(f"i={i}, newMinDist={dist}")
             iBest = i
             minDist = dist
+            
     print("Dataset with distribution closest to true values:")
     print(f"Index={iBest} with mu={muArr[iBest]}, sigma={sigmaArr[iBest]}")
     return iBest
