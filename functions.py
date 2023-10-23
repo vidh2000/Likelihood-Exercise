@@ -13,8 +13,8 @@ import matplotlib.transforms as transforms
 from scipy import integrate
 from math import factorial
 
-def gauss(x,mu,sig):
-    return 1/(np.sqrt(2*np.pi)*sig) * np.exp(-(x-mu)**2 / (2*sig**2))
+def gauss(x,mu,sig,A=1):
+    return A/(np.sqrt(2*np.pi)*sig) * np.exp(-(x-mu)**2 / (2*sig**2))
 
 
 
@@ -23,25 +23,32 @@ def nll(params, binData):
     2 * Negative Log Likehood (up to a constant)
     Parameters:
     - params: [mu,N_signal]. Can be floats or arrays.
-    - binData: [bin_heights, bin_edges]
+    - binData: [bin_heights, bin_edges, N_bg]
         - bin_heights: amount of data per bin in data_histogram
         - bin_edges: positions of edges of bins
+        - N_bg: number of total bg events
     We're dealing with Gaussian signal here with sigma=1, hence
     params are as defined below (hardcoded) and a const. background.
     """
 
     mu = params[0]
     N_signal = params[1]
-    bin_heights, bin_edges = binData
+    bin_heights, bin_edges, N_bg = binData
     N_bins = len(bin_heights)*1.0
     bin_width = bin_edges[1]-bin_edges[0]
     nll = 0
     for i,m_i in enumerate(bin_heights):
-        # lambd = expected average number of events per bin (contribution: bg+signal)
-        gauss_with_known_mu_sigma = partial(gauss,
-                                            mu=mu,sig=1)
-        #Assuming we always have 100 background events
-        lambd_i = float(100) / N_bins + \
+
+        # Calculate the amplitude of Gaussian corresponding to N_signal
+        # Note: 1 signal event area = bin_width*1 hence
+        amplitude_gauss = N_signal / (bin_width*np.sqrt(2*np.pi))
+        gauss_with_known_mu_sigma = partial(gauss, 
+                            A=amplitude_gauss, mu=mu, sig=1)
+        
+        
+        # lambd_i = expected average number of events per bin 
+        # (contribution: bg+signal)
+        lambd_i = float(N_bg) / N_bins + \
                 integrate.quad(gauss_with_known_mu_sigma,
                                bin_edges[i],
                                bin_edges[i+1])[0]
@@ -212,7 +219,8 @@ def data_generation_task(i, n_background,mu,sig,n_signal,n_datasets,
 
     # Minimising the NLL to obtain optimal parameters
     init_guess = [5,n_signal-1]
-    results = optimize.minimize(nll,init_guess,([bin_heights,bin_edges]),
+    results = optimize.minimize(
+        nll,init_guess,([bin_heights,bin_edges, n_background]),
                                 method = "L-BFGS-B", 
                                 bounds = ((None,None),(0,None)))
     return results.x, data

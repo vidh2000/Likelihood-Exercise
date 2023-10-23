@@ -33,7 +33,6 @@ if __name__=="__main__":
 
     # Get bin heights and centers
     bin_heights = hist
-    bin_width = bin_edges[1]-bin_edges[0]
     bin_centers = 0.5 * (bin_edges[1:] + bin_edges[:-1])
 
     # Data plotting
@@ -53,7 +52,8 @@ if __name__=="__main__":
         \n 2a. NLL 2D minimisation and plotting\n")
 
     # NLL plotting 2D
-    NLL = nll_mesh(mu_arr,Nsignal_arr,binData=[bin_heights,bin_edges])
+    NLL = nll_mesh(mu_arr,Nsignal_arr,
+                   binData=[bin_heights,bin_edges,N_BACKGROUND])
 
     title="NLL_2D_mesh"
     plt.figure(title)
@@ -67,7 +67,8 @@ if __name__=="__main__":
 
     # Minimising the NLL to obtain optimal parameters
     init_guess = [5,N_SIGNAL-1] #[mu, n_signal]
-    results = optimize.minimize(nll,init_guess,([bin_heights,bin_edges]), 
+    results = optimize.minimize(nll,init_guess,
+                                ([bin_heights,bin_edges,N_BACKGROUND]), 
                         method = "L-BFGS-B", bounds = ((None,None),(0,None)))
     print(results)
     best_params = results.x
@@ -80,13 +81,13 @@ if __name__=="__main__":
     # NLL plotting 1D per parameter variations
     title = "NLL(mu) and NLL(sigma)"
 
-    mu_arr = np.linspace(1,9,10000)
-    Nsignal_arr = np.linspace(0,N_SIGNAL*5, 10000)
+    mu_arr = np.linspace(1,9,1000)
+    Nsignal_arr = np.linspace(0,N_SIGNAL*5, 1000)
 
     fig, (ax1, ax2) = plt.subplots(1, 2)
     label = r"$N_{signal}$ = " + f"{N_SIGNAL}"
     ax1.plot(mu_arr,
-        [nll([mu,N_SIGNAL],binData=[bin_heights, bin_edges]) for mu in mu_arr],
+        [nll([mu,N_SIGNAL],binData=[bin_heights, bin_edges,N_BACKGROUND]) for mu in mu_arr],
                         label=label)
     ax1.grid(alpha=0.1)
     ax1.legend()
@@ -94,7 +95,7 @@ if __name__=="__main__":
     ax1.set_xlabel(r"$\mu$")
 
     ax2.plot(Nsignal_arr,
-             [nll([MU,nsignal],binData=[bin_heights, bin_edges]) for nsignal in Nsignal_arr],
+             [nll([MU,nsignal],binData=[bin_heights, bin_edges,N_BACKGROUND]) for nsignal in Nsignal_arr],
                         label=rf"$\mu$ = {MU}")
     ax2.grid(alpha=0.1)
     ax2.legend()
@@ -113,9 +114,10 @@ if __name__=="__main__":
     print("\n################################################\
         \n 4a. Using Wilk's theorem to estimate uncertainties \n")
     
-    std_guesses = [1,10] # params = [mu, N_signal]
-    uncs_mu, uncs_Nsignal = pm_error_finder(nll,[bin_heights,bin_edges],
-                                            best_params,std_guesses)
+    std_guesses = [1,N_SIGNAL/5] # params = [mu, N_signal]
+    uncs_mu, uncs_Nsignal = pm_error_finder(
+        nll,[bin_heights,bin_edges,N_BACKGROUND],best_params,std_guesses)
+    
     print(f"mu = {best_params[0]} +- {uncs_mu}")
     print(f"N_signal = {best_params[1]} +- {uncs_Nsignal}")
 
@@ -160,7 +162,7 @@ if __name__=="__main__":
     # 1D per parameter variations plots (see if Wilk's theorem works)
     title = "Fluctuated 1000 datasets parameters distributions"
     ymax = 1
-    N_bins=20
+    N_bins=N_BINS
     fig, (ax1, ax2) = plt.subplots(1, 2)
     ax1.hist(mus_arr, #bins= N_bins, 
              #density = True, 
@@ -230,7 +232,7 @@ if __name__=="__main__":
     # Find histogram bins for the "best" dataset
     hist, bin_edges = np.histogram(dataBest, bins=N_BINS)
     bin_heights = hist
-    binDataBest = [bin_heights, bin_edges]
+    binDataBest = [bin_heights, bin_edges,N_BACKGROUND]
     nllOverNdatasets = nll_mesh(xAxis_arr,yAxis_arr,binDataBest)
     
     # Rescale NLL so NLL_min = 0
