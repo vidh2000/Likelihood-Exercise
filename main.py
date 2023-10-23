@@ -279,7 +279,13 @@ if __name__=="__main__":
     print(f"Data gives: [{frac1std}, {frac2std}]")
 
 
-
+    print("\n################################################\
+        \n 5. Bayesian contours on 2D phase space for flat priors \n")
+    
+    # NLL is proportional to e^nll and since \int p(x) = 1
+    # you can get the area of integration for the contour by
+    # making space into grids and getting area that way...
+    pass 
 
     print("FINISHED")
     plt.show() 
