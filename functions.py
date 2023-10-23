@@ -10,56 +10,73 @@ from tqdm import tqdm
 from scipy.stats import chi2
 from matplotlib.patches import Ellipse
 import matplotlib.transforms as transforms
+from scipy import integrate
+from math import factorial
 
 def gauss(x,mu,sig):
-    #if x>0 and x<10:
     return 1/(np.sqrt(2*np.pi)*sig) * np.exp(-(x-mu)**2 / (2*sig**2))
-    #else:
-    #    return 0
 
 
-def nll(params, data):
+
+def nll(params, binData):
     """
     2 * Negative Log Likehood (up to a constant)
     Parameters:
-    - params: [mu,sigma]. Can be floats or arrays.
-    - data: dataset of x values
-    We're dealing with Gaussian signal here hence
-    params are as defined below (hardcoded).
+    - params: [mu,N_signal]. Can be floats or arrays.
+    - binData: [bin_heights, bin_edges]
+        - bin_heights: amount of data per bin in data_histogram
+        - bin_edges: positions of edges of bins
+    We're dealing with Gaussian signal here with sigma=1, hence
+    params are as defined below (hardcoded) and a const. background.
     """
+
     mu = params[0]
-    sig = params[1]
-    nll = len(data)*np.log(sig)
-    for x in data:
-        nll += (x-mu)**2 / (2*sig*sig)
+    N_signal = params[1]
+    bin_heights, bin_edges = binData
+    N_bins = len(bin_heights)*1.0
+    bin_width = bin_edges[1]-bin_edges[0]
+    nll = 0
+    for i,m_i in enumerate(bin_heights):
+        # lambd = expected average number of events per bin (contribution: bg+signal)
+        gauss_with_known_mu_sigma = partial(gauss,
+                                            mu=mu,sig=1)
+        #Assuming we always have 100 background events
+        lambd_i = float(100) / N_bins + \
+                integrate.quad(gauss_with_known_mu_sigma,
+                               bin_edges[i],
+                               bin_edges[i+1])[0]
+        nll += lambd_i - float(m_i)*np.log(lambd_i) + np.log(float(factorial(m_i)))
+
     return 2*nll
 
 
-def task(sig,mu_arr,data,N_data,i):
+def task(N_signal,mu_arr,N_iter,binData,i):
     """
     Task for parallelised NLL mesh generation
     """
     row = []
-    #print(f"Mesh generation Progress: {round(float(i)/N_data*100,3)}%")
+    binData
+    #print(f"Mesh generation Progress: {round(float(i)/N_iter*100,3)}%")
     for mu in mu_arr:
-        param_vec = [mu,sig]
-        NLL = nll(param_vec,data)
+        param_vec = [mu,N_signal]
+        NLL = nll(param_vec,binData)
         row.append(NLL)
     return row
 
-def nll_mesh(mu_arr, sig_arr, data):
+def nll_mesh(mu_arr, N_signal_arr, binData):
     """
-    Constructs a mesh of NLL values across the mu and sig parameter domain.
+    Constructs a mesh of NLL values across the mu and N parameter domain.
     Useful for plotting contours etc.
     Parallelised on the outer loop for speed.
     """
     
-    N = len(sig_arr)
-    args = list(zip(sig_arr,
-                    [mu_arr for _ in sig_arr],
-                    [data for _ in sig_arr],
-                    [N for _ in sig_arr],
-                    list(range(N))))
+    N_datapoints = len(N_signal_arr)
+    args = list(zip(N_signal_arr,
+                    [mu_arr for _ in N_signal_arr],
+                    [N_datapoints for _ in N_signal_arr],
+                    [binData for _ in N_signal_arr],
+                    list(range(N_datapoints)) )
+                    )
     with Pool() as pool:
         mesh = list(pool.starmap(task, args))
 		
@@ -179,16 +196,25 @@ def pm_error_finder(f,params,vec,sig,pos=None,eps=1e-12):
     return results
 
 
-def data_generation_task(i, n_background,mu,sig,n_signal,n_datasets):
+def data_generation_task(i, n_background,mu,sig,n_signal,n_datasets,
+                         N_bins):
     
     #print(f"DataGen: {round(float(i)/n_datasets*100,3)} %")
     bg = 10*np.random.rand(n_background)
     signal = np.random.normal(mu,sig,n_signal)
     data = np.concatenate((bg,signal))
 
+    # Get histogram distribution of data
+    hist, bin_edges = np.histogram(data, bins=N_bins)
+
+    # Get bin heights
+    bin_heights = hist
+
     # Minimising the NLL to obtain optimal parameters
-    init_guess = [5,2]
-    results = optimize.minimize(nll,init_guess,(data),method = 'Nelder-Mead')
+    init_guess = [5,n_signal-1]
+    results = optimize.minimize(nll,init_guess,([bin_heights,bin_edges]),
+                                method = "L-BFGS-B", 
+                                bounds = ((None,None),(0,None)))
     return results.x, data
 
 
@@ -244,8 +270,7 @@ def fracOfDataInStd(nllOverNDatasets, NLL_min, NbStd):
         raise ValueError("NbStd takes values 1 or 2.")
 
     for nll in nllOverNDatasets:
-        diff = nll-NLL_min
-        if diff <= val:
+        if nll-NLL_min <= val:
             count +=1
     frac = count/N
     return frac
@@ -253,18 +278,18 @@ def fracOfDataInStd(nllOverNDatasets, NLL_min, NbStd):
 
 
 
-def find_optimal_data_distrib(muArr,sigmaArr,trueMu,trueSigma):
+def find_optimal_data_distrib(muArr,NsignalArr,trueMu,trueNsignal):
     """
-    Takes arrays of mu and sigma values, each i corresponding to the same
+    Takes arrays of mu and N_signal values, each i corresponding to the same
     data distribution, and compares them with true values.
     The distribution - index which has closest mu and sigma to true values
     is returned as the output of the function.
     """
     iBest = 0
     minDist = 1e8
-    trueVec = np.array([trueMu,trueSigma])
-    for i,(mu,sigma) in enumerate(zip(muArr,sigmaArr)):
-        paramVec = np.array([mu,sigma])
+    trueVec = np.array([trueMu,trueNsignal])
+    for i,(mu,N_signal) in enumerate(zip(muArr,NsignalArr)):
+        paramVec = np.array([mu,N_signal])
         dist = np.linalg.norm(paramVec-trueVec)
         if dist<minDist:
             #print(f"i={i}, newMinDist={dist}")
@@ -272,7 +297,7 @@ def find_optimal_data_distrib(muArr,sigmaArr,trueMu,trueSigma):
             minDist = dist
 
     print("Dataset with distribution closest to true values:")
-    print(f"Index={iBest} with mu={muArr[iBest]}, sigma={sigmaArr[iBest]}")
+    print(f"Index={iBest} with mu={muArr[iBest]}, N_signal={NsignalArr[iBest]}")
     return iBest
 
 
