@@ -229,9 +229,8 @@ def fracOfDataInStd(nllOverNDatasets, NLL_min, NbStd):
     """
     
     
-    N=float(len(nllOverNDatasets)*len(nllOverNDatasets[0]))
+    N=float(len(nllOverNDatasets))
     count=0.0
-    # 2D parameter scatter plots (see if Wilk's theorem works)
     df = 2  # For a two-parameter problem
     # Calculate χ² values for 1 and 2 sigma confidence intervals
     chi2_1sigma = chi2.ppf(0.6827, df)
@@ -244,12 +243,10 @@ def fracOfDataInStd(nllOverNDatasets, NLL_min, NbStd):
     else:
         raise ValueError("NbStd takes values 1 or 2.")
 
-    for row in nllOverNDatasets:
-        for nll in row:
-            nllDif = nll-NLL_min
-            if nllDif <= val:
-                print(nllDif)
-                count +=1
+    for nll in nllOverNDatasets:
+        diff = nll-NLL_min
+        if diff <= val:
+            count +=1
     frac = count/N
     return frac
     

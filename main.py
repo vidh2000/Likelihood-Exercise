@@ -214,9 +214,13 @@ if __name__=="__main__":
     # closest to the true MU and SIGMA values
     dataBest = data_arr[find_optimal_data_distrib(mus_arr,sigs_arr,MU,SIGMA)]
     nllOverNdatasets = nll_mesh(xAxis_arr,yAxis_arr,dataBest)
+    
+    # Rescale NLL so NLL_min = 0
     nll_min = nll([MU,SIGMA],dataBest)
+    nllOverNdatasets=nllOverNdatasets-nll_min
+    
     h = plt.contour(xAxis_arr, yAxis_arr,nllOverNdatasets,
-                    levels=[nll_min+chi2_1sigma, nll_min+chi2_2sigma],
+                    levels=[chi2_1sigma, chi2_2sigma],
                     colors=["darkorange","forestgreen"],linewidths = 2)
                     #alpha=1.0,cmap="nipy_spectral",levels=200)
     # Label contour lines
@@ -225,6 +229,13 @@ if __name__=="__main__":
     for l, s in zip(h.levels, contourNames):
         fmt[l] = s
     plt.clabel(h, h.levels, inline=True, fmt=fmt, fontsize=14)
+
+    #colourbar full nll
+    h = plt.contourf(xAxis_arr, yAxis_arr,nllOverNdatasets, 
+                     alpha=1.0,cmap="nipy_spectral",levels=200)
+    clb = plt.colorbar()
+    clb.set_label(r'NLL $(\mu, \sigma)$')
+    
 
     # Plot scatter points from different dataset fits
     plt.scatter(mus_arr,sigs_arr,color="black", marker=".", 
@@ -236,9 +247,14 @@ if __name__=="__main__":
     plt.legend()
     plt.tight_layout()
     
+
+
     # Fraction of data lying in contours 1std/2std
-    frac1std = fracOfDataInStd(nllOverNdatasets,nll_min,1)
-    frac2std = fracOfDataInStd(nllOverNdatasets,nll_min,2)
+    nlls_from_datasets = [nll([mu,sigma],dataBest) for 
+                                        (mu,sigma) in zip(mus_arr,sigs_arr)]
+    
+    frac1std = fracOfDataInStd(nlls_from_datasets,nll_min,1)
+    frac2std = fracOfDataInStd(nlls_from_datasets,nll_min,2)
     print("\nFraction of data contained within [1 std, 2 std] for 2D = [68.27%, 95.45%]")
     print(f"Data gives: [{frac1std}, {frac2std}]")
 
