@@ -8,7 +8,8 @@ from functools import partial
 from copy import deepcopy
 from tqdm import tqdm
 from scipy.stats import chi2
-
+from matplotlib.patches import Ellipse
+import matplotlib.transforms as transforms
 
 def gauss(x,mu,sig):
     #if x>0 and x<10:
@@ -216,6 +217,44 @@ def fracOfDataInRange(data, center, maxDist):
     frac = count/N
     return frac
 
+def fracOfDataInStd(nllOverNDatasets, NLL_min, NbStd):
+    """
+    Finds fraction of datasets that can be parametrised with
+    values that lie within specified number of 
+    standard deviations from the parameters that minimise NLL.
+    NLL values for all datasets are stored in nllOverNDatasets.
+    Compares values of -2NLL since -2NLL=chi^2
+    Intended for 2D parametrised data.
+    NbStd only works for = 1 and 2.
+    """
+    
+    
+    N=float(len(nllOverNDatasets)*len(nllOverNDatasets[0]))
+    count=0.0
+    # 2D parameter scatter plots (see if Wilk's theorem works)
+    df = 2  # For a two-parameter problem
+    # Calculate χ² values for 1 and 2 sigma confidence intervals
+    chi2_1sigma = chi2.ppf(0.6827, df)
+    chi2_2sigma = chi2.ppf(0.9545, df)
+    
+    if NbStd==1:
+        val = chi2_1sigma
+    elif NbStd==2:
+        val = chi2_2sigma
+    else:
+        raise ValueError("NbStd takes values 1 or 2.")
+
+    for row in nllOverNDatasets:
+        for nll in row:
+            nllDif = nll-NLL_min
+            if nllDif <= val:
+                print(nllDif)
+                count +=1
+    frac = count/N
+    return frac
+    
+
+
 
 def find_optimal_data_distrib(muArr,sigmaArr,trueMu,trueSigma):
     """
@@ -234,10 +273,13 @@ def find_optimal_data_distrib(muArr,sigmaArr,trueMu,trueSigma):
             #print(f"i={i}, newMinDist={dist}")
             iBest = i
             minDist = dist
-            
+
     print("Dataset with distribution closest to true values:")
     print(f"Index={iBest} with mu={muArr[iBest]}, sigma={sigmaArr[iBest]}")
     return iBest
+
+
+
 
 def confidence_ellipse(x, y, ax, n_std=2.0, facecolor='none', **kwargs):
     """

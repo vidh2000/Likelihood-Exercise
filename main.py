@@ -202,7 +202,6 @@ if __name__=="__main__":
 
     print(f"1 Sigma (68%) Confidence Interval χ² Value for DoF={df}: {chi2_1sigma:.2f}")
     print(f"2 Sigma (95%) Confidence Interval χ² Value for DoF={df}: {chi2_2sigma:.2f}")
-    
 
 
     title = "2D phasespace (Wilk's Theorem Contours)"
@@ -237,7 +236,14 @@ if __name__=="__main__":
     plt.legend()
     plt.tight_layout()
     
-    
-   
+    # Fraction of data lying in contours 1std/2std
+    frac1std = fracOfDataInStd(nllOverNdatasets,nll_min,1)
+    frac2std = fracOfDataInStd(nllOverNdatasets,nll_min,2)
+    print("\nFraction of data contained within [1 std, 2 std] for 2D = [68.27%, 95.45%]")
+    print(f"Data gives: [{frac1std}, {frac2std}]")
+
+
+
+
     print("FINISHED")
     plt.show() 
