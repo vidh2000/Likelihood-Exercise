@@ -18,21 +18,17 @@ MU = 6
 N_BACKGROUND = 100
 N_SIGNAL = 15
 N_BINS = 20
-
-N_DATA = N_BACKGROUND+N_SIGNAL
+N_fluctuated_datasets = 9 #must be a n^2 number
 
 
 if __name__=="__main__":   
+
+    N_DATA = N_BACKGROUND+N_SIGNAL
 
     # Create Signal and Background data 
     print("\n################################################\
         \n 1. Generate datasets\n")
     
-    # Fluctuated dataset
-    bg = 10*np.random.rand(N_BACKGROUND)
-    signal = np.random.normal(MU,SIGMA,N_SIGNAL)
-    data = np.concatenate((bg,signal))
-
     # Asimov dataset
     bg_asim = np.linspace(0,10,N_BACKGROUND)
     signal_asim = get_asimov_signal_dataset(N_SIGNAL)
@@ -49,16 +45,16 @@ if __name__=="__main__":
     mu_arr = np.linspace(0,10,N_meshpoints)
     Nsignal_arr = np.linspace(0,N_SIGNAL*2, N_meshpoints)
 
-    plt.show()
+
     print("\n################################################\
         \n 2a. NLL 2D minimisation and plotting\n")
 
     # NLL plotting 2D
-    NLL = nll_mesh(mu_arr,Nsignal_arr,data_asim)
+    NLL_ASIM = nll_mesh(mu_arr,Nsignal_arr,data_asim)
 
     title="NLL_2D_mesh_Asimov"
     plt.figure(title)
-    h = plt.contourf(mu_arr, Nsignal_arr, NLL, 
+    h = plt.contourf(mu_arr, Nsignal_arr, NLL_ASIM, 
                         alpha=1.0,cmap="nipy_spectral",levels=200)
     plt.xlabel(r"$\mu $")
     plt.ylabel(r"$N_{signal}$")
@@ -69,8 +65,7 @@ if __name__=="__main__":
     # Minimising the NLL to obtain optimal parameters
     init_guess = [5,N_SIGNAL-1] #[mu, n_signal]
     results = optimize.minimize(nll,init_guess,(data_asim), 
-                    method = "L-BFGS-B", bounds = ((None,None),(0,None)))
-    print(results)
+                    method = "L-BFGS-B", bounds = ((0,10),(0,None)))
     best_params = results.x
     print("The best fit parameters are: (mu,N) = ", best_params)
 
@@ -81,22 +76,43 @@ if __name__=="__main__":
     # NLL plotting 1D per parameter variations
     title = "NLL(mu) and NLL(sigma)"
 
-    mu_arr = np.linspace(1,9,1000)
-    Nsignal_arr = np.linspace(0,N_SIGNAL*2, 1000)
+    mu_arr = np.linspace(1,9,500)
+    Nsignal_arr = np.linspace(0,N_SIGNAL*2, 500)
 
     fig, (ax1, ax2) = plt.subplots(1, 2)
-    label = r"$N_{signal}$ = " + f"{N_SIGNAL}"
+
+    mu_profile_arr = []
+    for mu in mu_arr:
+        partial_nll = partial(nll_partial_Nsig, mu=mu,data=data_asim)
+        init_guess = 5 #[mu, n_signal]
+        results = optimize.minimize(partial_nll,init_guess, 
+                            method = "L-BFGS-B", 
+                            bounds = optimize.Bounds(lb=0.0))
+        best_nsig = results.x
+        mu_profile_arr.append(best_nsig)
+
     ax1.plot(mu_arr,
-        [nll([mu,N_SIGNAL],data) for mu in mu_arr],
-                        label=label)
+    [nll([mu,nsig],data_asim) for (mu,nsig) in zip(mu_arr,mu_profile_arr)],
+                        label=r"$\mu$ NLL profile")
     ax1.grid(alpha=0.1)
     ax1.legend()
     ax1.set_ylabel(r"NLL($\mu$)")
     ax1.set_xlabel(r"$\mu$")
 
+    nsig_profile_arr = []
+    for Nsig in Nsignal_arr:
+        partial_nll = partial(nll_partial_mu, N_signal=Nsig, data=data_asim)
+        init_guess = N_SIGNAL-1 #[mu, n_signal]
+        results = optimize.minimize(partial_nll,init_guess, 
+                            method = "L-BFGS-B", 
+                            bounds = optimize.Bounds(lb=0.0,ub=10.0))
+        best_mu = results.x
+        nsig_profile_arr.append(best_mu)
+
     ax2.plot(Nsignal_arr,
-             [nll([MU,nsignal],data) for nsignal in Nsignal_arr],
-                        label=rf"$\mu$ = {MU}")
+    [nll([mu,nsig],data_asim) for (mu,nsig) in zip(nsig_profile_arr,Nsignal_arr)],
+                        label=r"$N_{signal}$ NLL profile")
+
     ax2.grid(alpha=0.1)
     ax2.legend()
     ax2.set_ylabel(r"NLL($N_{signal}$)")
@@ -109,7 +125,62 @@ if __name__=="__main__":
     print("\n################################################\
         \n 3. Creating multiple fluctuated datasets for comparison\n")
 
-    pass # yet to be implemented
+    N_meshpoints = 100
+    mu_arr = np.linspace(0,10,N_meshpoints)
+    Nsignal_arr = np.linspace(0,N_SIGNAL*2, N_meshpoints)
+
+    n = int(np.sqrt(N_fluctuated_datasets))
+
+    NLL_meshes = []
+    optim_params_matrix=[]
+
+    for i in range(n):
+        mrow=[]
+        oprow=[]
+        for j in range(n):
+            # Fluctuated dataset
+            bg = 10*np.random.rand(N_BACKGROUND)
+            signal = np.random.normal(MU,SIGMA,N_SIGNAL)
+            data = np.concatenate((bg,signal))
+
+            # NLL plotting 2D
+            NLL = nll_mesh(mu_arr,Nsignal_arr,data)
+            
+            # Minimising the NLL to obtain optimal point for each
+            init_guess = [5,N_SIGNAL-1] #[mu, n_signal]
+            results = optimize.minimize(nll,init_guess,(data), 
+                            method = "L-BFGS-B", bounds = ((0,10),(0,None)))
+            best_params = results.x
+
+            mrow.append(NLL)
+            oprow.append(best_params)
+        NLL_meshes.append(mrow)
+        optim_params_matrix.append(oprow)
+    
+    title = "NLL_2D_fluctuating_datasets"
+    # Create a figure and an n x n grid of subplots
+    fig, axes = plt.subplots(n, n, figsize=(10, 10))
+    for i in range(n):
+        for j in range(n):
+            ax=axes[i,j]
+            h=ax.contourf(mu_arr, Nsignal_arr, NLL_meshes[i][j], 
+                            alpha=1.0,cmap="nipy_spectral",levels=200)
+            if j==0:
+                ax.set_ylabel(r"$N_{signal}$")
+            if i==n-1:
+                ax.set_xlabel(r"$\mu $")
+            
+            optim_params = optim_params_matrix[i][j]
+            label = r"($\mu$, $N_{signal}$) = " + \
+                f"({round(optim_params[0],2)}, {round(optim_params[1],1)})"
+            ax.scatter(optim_params[0],optim_params[1], 
+                    color="red", marker="o", label=label)
+            ax.legend()
+            fig.colorbar(h, label=r'NLL $(\mu,N_{signal})$', 
+                         ax=ax, location='right',orientation="vertical")
+            
+    plt.tight_layout()
+
 
     print("\n################################################\
         \n 4a. Using Wilk's theorem to estimate uncertainties \n")
@@ -226,11 +297,12 @@ if __name__=="__main__":
 
     # For NLL plot and contour drawing take dataset which has param values
     # closest to the true MU and Nsignal values
+
     #dataBest = data_arr[find_optimal_data_distrib(mus_arr,nsignals_arr,MU,N_SIGNAL)]
     nllOverNdatasets = nll_mesh(xAxis_arr,yAxis_arr,data_asim)
-    
+
     # Rescale NLL so NLL_min = 0
-    nll_min = nll([MU,N_SIGNAL],data_asim)
+    nll_min = nll(best_params,data_asim)
     nllOverNdatasets=nllOverNdatasets-nll_min
     
     h = plt.contour(xAxis_arr, yAxis_arr,nllOverNdatasets,
@@ -245,7 +317,7 @@ if __name__=="__main__":
     plt.clabel(h, h.levels, inline=True, fmt=fmt, fontsize=15)
 
     #colourbar full nll
-    h = plt.contourf(xAxis_arr, yAxis_arr,nllOverNdatasets, 
+    h = plt.contourf(xAxis_arr, yAxis_arr, nllOverNdatasets, 
                      alpha=1.0,cmap="nipy_spectral",levels=200)
     clb = plt.colorbar()
     clb.set_label(r'NLL $(\mu, N_{signal})$')
@@ -255,7 +327,6 @@ if __name__=="__main__":
     plt.scatter(mus_arr,nsignals_arr,color="black", marker=".", 
                                         label=r'Data $(\mu, N_{signal})$')
     plt.scatter(MU,N_SIGNAL, color="red", marker="o", label=r"True $(\mu,N_{signal})$")
-    plt.yscale(min=0)
     plt.xlabel(r"$\mu$")
     plt.ylabel(r"$N_{signal}$")
     plt.legend()
@@ -264,11 +335,11 @@ if __name__=="__main__":
 
 
     # Fraction of data lying in contours 1std/2std
-    nlls_from_datasets = [nll([mu,n_signal],data) for 
+    nlls_from_datasets = [nll([mu,n_signal],data_asim) for 
                                         (mu,n_signal) in zip(mus_arr,nsignals_arr)]
     
-    frac1std = fracOfDataInStd(nlls_from_datasets,nll_min,1)
-    frac2std = fracOfDataInStd(nlls_from_datasets,nll_min,2)
+    frac1std = fracOfDataInStd(nlls_from_datasets,nll_min,NbStd=1)
+    frac2std = fracOfDataInStd(nlls_from_datasets,nll_min,NbStd=2)
     print("\nFraction of data contained within [1 std, 2 std] for 2D = [68.27%, 95.45%]")
     print(f"Data gives: [{frac1std}, {frac2std}]")
 

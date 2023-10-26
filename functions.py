@@ -4,7 +4,6 @@ import matplotlib.pyplot as plt
 from functions import *
 from scipy import optimize
 from multiprocessing import Pool, freeze_support
-from functools import partial
 from copy import deepcopy
 from tqdm import tqdm
 from scipy.stats import chi2
@@ -19,6 +18,7 @@ def gauss(x,mu,sig=1):
 
 def get_asimov_signal_dataset(N_signals):
 
+    #distr = stats.truncnorm(loc=6,scale=1,a=-6,b=4)
     distr = stats.norm(loc=6,scale=1)
     x = np.linspace(*distr.cdf([0,10]),N_signals+2)[1:-1]
                 
@@ -38,6 +38,50 @@ def nll(params, data):
 
     mu = params[0]
     N_signal = params[1]
+    N_data = len(data)
+    frac = float(N_signal)/N_data
+    nll=0
+
+    for i,x in enumerate(data):
+
+        nll += np.log(
+            (1-frac)*1/10 + frac*gauss(x,mu,1) 
+            )
+
+    return -2*nll
+
+def nll_partial_mu(mu, N_signal, data):
+    """
+    2 * Negative Log Likehood (up to a constant)
+    Parameters:
+    - params: [mu,N_signal]. Can be floats or arrays.
+    - data: array of x values
+    We're dealing with Gaussian signal here with sigma=1, and const.
+    background
+    """
+
+    N_data = len(data)
+    frac = float(N_signal)/N_data
+    nll=0
+
+    for i,x in enumerate(data):
+
+        nll += np.log(
+            (1-frac)*1/10 + frac*gauss(x,mu,1) 
+            )
+
+    return -2*nll
+
+def nll_partial_Nsig(N_signal, mu, data):
+    """
+    2 * Negative Log Likehood (up to a constant)
+    Parameters:
+    - params: [mu,N_signal]. Can be floats or arrays.
+    - data: array of x values
+    We're dealing with Gaussian signal here with sigma=1, and const.
+    background
+    """
+
     N_data = len(data)
     frac = float(N_signal)/N_data
     nll=0
@@ -227,7 +271,7 @@ def fracOfDataInRange(data, center, maxDist):
     frac = count/N
     return frac
 
-def fracOfDataInStd(nllOverNDatasets, NLL_min, NbStd):
+def fracOfDataInStd(nlls_from_datasets, NLL_min, NbStd):
     """
     Finds fraction of datasets that can be parametrised with
     values that lie within specified number of 
@@ -239,7 +283,8 @@ def fracOfDataInStd(nllOverNDatasets, NLL_min, NbStd):
     """
     
     
-    N=float(len(nllOverNDatasets))
+    N=float(len(nlls_from_datasets))
+    print("N=",N)
     count=0.0
     df = 2  # For a two-parameter problem
     # Calculate χ² values for 1 and 2 sigma confidence intervals
@@ -253,9 +298,9 @@ def fracOfDataInStd(nllOverNDatasets, NLL_min, NbStd):
     else:
         raise ValueError("NbStd takes values 1 or 2.")
 
-    for nll in nllOverNDatasets:
+    for nll in nlls_from_datasets:
         if nll-NLL_min <= val:
-            count +=1
+            count +=1.0
     frac = count/N
     return frac
     
