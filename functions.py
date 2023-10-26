@@ -12,65 +12,58 @@ from matplotlib.patches import Ellipse
 import matplotlib.transforms as transforms
 from scipy import integrate
 from math import factorial
+import scipy.stats as stats 
 
-def gauss(x,mu,sig,A=1):
-    return A/(np.sqrt(2*np.pi)*sig) * np.exp(-(x-mu)**2 / (2*sig**2))
+def gauss(x,mu,sig=1):
+    return 1/(np.sqrt(2*np.pi)*sig) * np.exp(-(x-mu)**2 / (2*sig**2))
 
+def get_asimov_signal_dataset(N_signals):
 
+    distr = stats.norm(loc=6,scale=1)
+    x = np.linspace(*distr.cdf([0,10]),N_signals+2)[1:-1]
+                
+    signals_asimov_dataset = distr.ppf(x)
 
-def nll(params, binData):
+    return signals_asimov_dataset
+
+def nll(params, data):
     """
     2 * Negative Log Likehood (up to a constant)
     Parameters:
     - params: [mu,N_signal]. Can be floats or arrays.
-    - binData: [bin_heights, bin_edges, N_bg]
-        - bin_heights: amount of data per bin in data_histogram
-        - bin_edges: positions of edges of bins
-        - N_bg: number of total bg events
-    We're dealing with Gaussian signal here with sigma=1, hence
-    params are as defined below (hardcoded) and a const. background.
+    - data: array of x values
+    We're dealing with Gaussian signal here with sigma=1, and const.
+    background
     """
 
     mu = params[0]
     N_signal = params[1]
-    bin_heights, bin_edges, N_bg = binData
-    N_bins = len(bin_heights)*1.0
-    bin_width = bin_edges[1]-bin_edges[0]
-    nll = 0
-    for i,m_i in enumerate(bin_heights):
+    N_data = len(data)
+    frac = float(N_signal)/N_data
+    nll=0
 
-        # Calculate the amplitude of Gaussian corresponding to N_signal
-        # Note: 1 signal event area = bin_width*1 hence
-        amplitude_gauss = N_signal / (bin_width*np.sqrt(2*np.pi))
-        gauss_with_known_mu_sigma = partial(gauss, 
-                            A=amplitude_gauss, mu=mu, sig=1)
-        
-        
-        # lambd_i = expected average number of events per bin 
-        # (contribution: bg+signal)
-        lambd_i = float(N_bg) / N_bins + \
-                integrate.quad(gauss_with_known_mu_sigma,
-                               bin_edges[i],
-                               bin_edges[i+1])[0]
-        nll += lambd_i - float(m_i)*np.log(lambd_i) + np.log(float(factorial(m_i)))
+    for i,x in enumerate(data):
 
-    return 2*nll
+        nll += np.log(
+            (1-frac)*1/10 + frac*gauss(x,mu,1) 
+            )
+
+    return -2*nll
 
 
-def task(N_signal,mu_arr,N_iter,binData,i):
+def task(N_signal,mu_arr,N_iter,data,i):
     """
     Task for parallelised NLL mesh generation
     """
     row = []
-    binData
     #print(f"Mesh generation Progress: {round(float(i)/N_iter*100,3)}%")
     for mu in mu_arr:
         param_vec = [mu,N_signal]
-        NLL = nll(param_vec,binData)
+        NLL = nll(param_vec,data)
         row.append(NLL)
     return row
 
-def nll_mesh(mu_arr, N_signal_arr, binData):
+def nll_mesh(mu_arr, N_signal_arr, data):
     """
     Constructs a mesh of NLL values across the mu and N parameter domain.
     Useful for plotting contours etc.
@@ -81,21 +74,11 @@ def nll_mesh(mu_arr, N_signal_arr, binData):
     args = list(zip(N_signal_arr,
                     [mu_arr for _ in N_signal_arr],
                     [N_datapoints for _ in N_signal_arr],
-                    [binData for _ in N_signal_arr],
+                    [data for _ in N_signal_arr],
                     list(range(N_datapoints)) )
                     )
     with Pool() as pool:
         mesh = list(pool.starmap(task, args))
-		
-    #Non parallelised version for debugging
-    # mesh = []
-    # for sig in tqdm(sig_arr):
-    #     row = []
-    #     for mu in mu_arr:
-    #         param_vec = [mu,sig]
-    #         NLL = nll(param_vec,data)
-    #         row.append(NLL)
-    #     mesh.append(row)
 
     return mesh
 
@@ -203,26 +186,19 @@ def pm_error_finder(f,params,vec,sig,pos=None,eps=1e-12):
     return results
 
 
-def data_generation_task(i, n_background,mu,sig,n_signal,n_datasets,
-                         N_bins):
+def data_generation_task(i, n_background,mu,sig,n_signal):
     
     #print(f"DataGen: {round(float(i)/n_datasets*100,3)} %")
     bg = 10*np.random.rand(n_background)
     signal = np.random.normal(mu,sig,n_signal)
     data = np.concatenate((bg,signal))
 
-    # Get histogram distribution of data
-    hist, bin_edges = np.histogram(data, bins=N_bins)
-
-    # Get bin heights
-    bin_heights = hist
-
     # Minimising the NLL to obtain optimal parameters
     init_guess = [5,n_signal-1]
     results = optimize.minimize(
-        nll,init_guess,([bin_heights,bin_edges, n_background]),
-                                method = "L-BFGS-B", 
-                                bounds = ((None,None),(0,None)))
+        nll,init_guess,(data),
+                    method = "L-BFGS-B", 
+                    bounds = ((None,None),(0,None)))
     return results.x, data
 
 

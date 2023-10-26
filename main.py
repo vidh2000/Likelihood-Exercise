@@ -16,46 +16,47 @@ from progressbar import ProgressBar, SimpleProgress
 SIGMA = 1
 MU = 6
 N_BACKGROUND = 100
-N_SIGNAL = 150
+N_SIGNAL = 15
 N_BINS = 20
+
+N_DATA = N_BACKGROUND+N_SIGNAL
+
 
 if __name__=="__main__":   
 
     # Create Signal and Background data 
     print("\n################################################\
         \n 1. Generate datasets\n")
+    
+    # Fluctuated dataset
     bg = 10*np.random.rand(N_BACKGROUND)
     signal = np.random.normal(MU,SIGMA,N_SIGNAL)
     data = np.concatenate((bg,signal))
 
-    # Get histogram distribution of data
-    hist, bin_edges = np.histogram(data, bins=N_BINS)
-
-    # Get bin heights and centers
-    bin_heights = hist
-    bin_centers = 0.5 * (bin_edges[1:] + bin_edges[:-1])
+    # Asimov dataset
+    bg_asim = np.linspace(0,10,N_BACKGROUND)
+    signal_asim = get_asimov_signal_dataset(N_SIGNAL)
+    data_asim = np.concatenate((bg_asim,signal_asim))
 
     # Data plotting
-    plt.figure("Data")
-    plt.hist(data,bins=N_BINS,label="Signal + Background")
+    plt.figure("Asimov Dataset")
+    plt.hist(data_asim,bins=N_BINS,label="Asimov dataset: Sig + Bg")
     plt.legend()
     plt.xlabel("x")
     plt.ylabel("N")
 
-
     N_meshpoints = 100
     mu_arr = np.linspace(0,10,N_meshpoints)
-    Nsignal_arr = np.linspace(0,N_SIGNAL*5, N_meshpoints)
+    Nsignal_arr = np.linspace(0,N_SIGNAL*2, N_meshpoints)
 
-
+    plt.show()
     print("\n################################################\
         \n 2a. NLL 2D minimisation and plotting\n")
 
     # NLL plotting 2D
-    NLL = nll_mesh(mu_arr,Nsignal_arr,
-                   binData=[bin_heights,bin_edges,N_BACKGROUND])
+    NLL = nll_mesh(mu_arr,Nsignal_arr,data_asim)
 
-    title="NLL_2D_mesh"
+    title="NLL_2D_mesh_Asimov"
     plt.figure(title)
     h = plt.contourf(mu_arr, Nsignal_arr, NLL, 
                         alpha=1.0,cmap="nipy_spectral",levels=200)
@@ -67,9 +68,8 @@ if __name__=="__main__":
 
     # Minimising the NLL to obtain optimal parameters
     init_guess = [5,N_SIGNAL-1] #[mu, n_signal]
-    results = optimize.minimize(nll,init_guess,
-                                ([bin_heights,bin_edges,N_BACKGROUND]), 
-                        method = "L-BFGS-B", bounds = ((None,None),(0,None)))
+    results = optimize.minimize(nll,init_guess,(data_asim), 
+                    method = "L-BFGS-B", bounds = ((None,None),(0,None)))
     print(results)
     best_params = results.x
     print("The best fit parameters are: (mu,N) = ", best_params)
@@ -77,17 +77,17 @@ if __name__=="__main__":
 
     print("\n################################################\
         \n 2b. Profile NLL for each parameter individually\n")
-
+      ###  PROFILE NLL IS DIFFERENT; FIX
     # NLL plotting 1D per parameter variations
     title = "NLL(mu) and NLL(sigma)"
 
     mu_arr = np.linspace(1,9,1000)
-    Nsignal_arr = np.linspace(0,N_SIGNAL*5, 1000)
+    Nsignal_arr = np.linspace(0,N_SIGNAL*2, 1000)
 
     fig, (ax1, ax2) = plt.subplots(1, 2)
     label = r"$N_{signal}$ = " + f"{N_SIGNAL}"
     ax1.plot(mu_arr,
-        [nll([mu,N_SIGNAL],binData=[bin_heights, bin_edges,N_BACKGROUND]) for mu in mu_arr],
+        [nll([mu,N_SIGNAL],data) for mu in mu_arr],
                         label=label)
     ax1.grid(alpha=0.1)
     ax1.legend()
@@ -95,7 +95,7 @@ if __name__=="__main__":
     ax1.set_xlabel(r"$\mu$")
 
     ax2.plot(Nsignal_arr,
-             [nll([MU,nsignal],binData=[bin_heights, bin_edges,N_BACKGROUND]) for nsignal in Nsignal_arr],
+             [nll([MU,nsignal],data) for nsignal in Nsignal_arr],
                         label=rf"$\mu$ = {MU}")
     ax2.grid(alpha=0.1)
     ax2.legend()
@@ -116,7 +116,7 @@ if __name__=="__main__":
     
     std_guesses = [1,N_SIGNAL/5] # params = [mu, N_signal]
     uncs_mu, uncs_Nsignal = pm_error_finder(
-        nll,[bin_heights,bin_edges,N_BACKGROUND],best_params,std_guesses)
+        nll,data,best_params,std_guesses)
     
     print(f"mu = {best_params[0]} +- {uncs_mu}")
     print(f"N_signal = {best_params[1]} +- {uncs_Nsignal}")
@@ -132,8 +132,7 @@ if __name__=="__main__":
     
     # Generate fluctuating datasets
     partial_data_gen_task = partial(data_generation_task,
-            n_background=N_BACKGROUND,mu = MU,sig = SIGMA, n_signal = N_SIGNAL,
-            n_datasets = N_datasets, N_bins = N_BINS)
+        n_background = N_BACKGROUND, mu = MU,sig = SIGMA, n_signal = N_SIGNAL)
     with Pool() as pool:
         # Parallelised dataset production - [(mu1,sig1),..] returned
         #params_arr = pool.map(partial_data_gen_task, range(N_datasets))
@@ -227,16 +226,11 @@ if __name__=="__main__":
 
     # For NLL plot and contour drawing take dataset which has param values
     # closest to the true MU and Nsignal values
-    dataBest = data_arr[find_optimal_data_distrib(mus_arr,nsignals_arr,MU,N_SIGNAL)]
-
-    # Find histogram bins for the "best" dataset
-    hist, bin_edges = np.histogram(dataBest, bins=N_BINS)
-    bin_heights = hist
-    binDataBest = [bin_heights, bin_edges,N_BACKGROUND]
-    nllOverNdatasets = nll_mesh(xAxis_arr,yAxis_arr,binDataBest)
+    #dataBest = data_arr[find_optimal_data_distrib(mus_arr,nsignals_arr,MU,N_SIGNAL)]
+    nllOverNdatasets = nll_mesh(xAxis_arr,yAxis_arr,data_asim)
     
     # Rescale NLL so NLL_min = 0
-    nll_min = nll([MU,N_SIGNAL],binDataBest)
+    nll_min = nll([MU,N_SIGNAL],data_asim)
     nllOverNdatasets=nllOverNdatasets-nll_min
     
     h = plt.contour(xAxis_arr, yAxis_arr,nllOverNdatasets,
@@ -245,7 +239,7 @@ if __name__=="__main__":
                     #alpha=1.0,cmap="nipy_spectral",levels=200)
     # Label contour lines
     fmt = {}
-    contourNames = [r"$1n_{signal}$", r"$2n_{signal}$"]
+    contourNames = [r"$1\sigma$", r"$2\sigma$"]
     for l, s in zip(h.levels, contourNames):
         fmt[l] = s
     plt.clabel(h, h.levels, inline=True, fmt=fmt, fontsize=15)
@@ -261,7 +255,7 @@ if __name__=="__main__":
     plt.scatter(mus_arr,nsignals_arr,color="black", marker=".", 
                                         label=r'Data $(\mu, N_{signal})$')
     plt.scatter(MU,N_SIGNAL, color="red", marker="o", label=r"True $(\mu,N_{signal})$")
-    
+    plt.yscale(min=0)
     plt.xlabel(r"$\mu$")
     plt.ylabel(r"$N_{signal}$")
     plt.legend()
@@ -270,7 +264,7 @@ if __name__=="__main__":
 
 
     # Fraction of data lying in contours 1std/2std
-    nlls_from_datasets = [nll([mu,n_signal],binDataBest) for 
+    nlls_from_datasets = [nll([mu,n_signal],data) for 
                                         (mu,n_signal) in zip(mus_arr,nsignals_arr)]
     
     frac1std = fracOfDataInStd(nlls_from_datasets,nll_min,1)
